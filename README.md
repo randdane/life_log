@@ -2,6 +2,15 @@
 
 LifeLog is a self-hosted, personal life-logging application designed for quick capture of events, notes, and moments. It provides a reliable and fast way to chronicle your life with flexible metadata and attachments, all fully searchable and hosted locally.
 
+## Getting Started
+
+- Generate a random password for the admin user:
+  - `$ openssl rand -base64 32`
+
+- Generate a random API token for the admin user:
+  - `$ python -c 'import uuid; print(uuid.uuid4())'`
+
+
 ## Features
 
 - **FastAPI Backend**: Robust and fast API-first design.

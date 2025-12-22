@@ -129,8 +129,6 @@ Docker Compose (high-level)
     - env:
       - DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/lifelog
       - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY
-      - MINIO_SECRET_KEY
       - ADMIN_PASSWORD (provided via env at runtime)
       - API_TOKEN (optional; generated if missing)
       - FILE_MAX_BYTES (default 10_485_760)

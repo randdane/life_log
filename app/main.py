@@ -6,19 +6,20 @@ from minio import Minio
 # MinIO Client Global
 minio_client = None
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     global minio_client
     print("Starting up LifeLog...")
-    
+
     # Initialize MinIO
     try:
         minio_client = Minio(
             settings.MINIO_ENDPOINT,
-            access_key=settings.MINIO_ACCESS_KEY,
-            secret_key=settings.MINIO_SECRET_KEY,
-            secure=settings.MINIO_SECURE
+            access_key=settings.MINIO_ROOT_USER,
+            secret_key=settings.MINIO_ROOT_PASSWORD,
+            secure=settings.MINIO_SECURE,
         )
         if not minio_client.bucket_exists(settings.MINIO_BUCKET):
             minio_client.make_bucket(settings.MINIO_BUCKET)
@@ -27,18 +28,18 @@ async def lifespan(app: FastAPI):
         print(f"Error connecting to MinIO: {e}")
 
     yield
-    
+
     # Shutdown
     print("Shutting down LifeLog...")
 
-app = FastAPI(
-    title=settings.PROJECT_NAME,
-    lifespan=lifespan
-)
+
+app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+
 
 @app.get("/health")
 def health_check():
     return {"status": "ok", "app": settings.PROJECT_NAME}
+
 
 @app.get("/")
 def read_root():

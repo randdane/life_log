@@ -1,9 +1,11 @@
-FROM python:3.14-slim
+FROM python:3.14
 
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
 
 COPY requirements.txt .
 
