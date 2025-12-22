@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=80.9"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lifelog"
+version = "0.1.0"
+description = "LifeLog MVP Project"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy",
+    "asyncpg",
+    "alembic",
+    "python-multipart",
+    "minio",
+    "jinja2",
+    "python-dotenv",
+    "passlib[bcrypt]",
+    "pydantic-settings",
+    "httpx",
+]

@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+venv
+.venv
+pip-log.txt
+pip-delete-this-directory
+.tox
+.coverage
+.coverage.*
+.cache
+htmlcov
+.mypy_cache
+.pytest_cache
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Docker / Compose
+docker-compose.yml
+docker-compose.*.yml
+Dockerfile
+
+# Documentation
+docs/
+README.md
+
+# IDEs
+.vscode
+.idea
