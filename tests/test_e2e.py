@@ -1,3 +1,5 @@
+"""Test end-to-end API functionality."""
+
 import httpx
 import pytest
 

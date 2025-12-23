@@ -1,5 +1,7 @@
 """FastAPI dependencies for the LifeLog API."""
 
+from typing import Annotated
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -8,7 +10,9 @@ from app.config import settings
 security_scheme = HTTPBearer(auto_error=False)
 
 
-async def get_current_token(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)):
+async def get_current_token(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security_scheme)],
+):
     """Dependency to validate the API token from the request header.
 
     Args:

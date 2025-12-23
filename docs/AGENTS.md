@@ -27,7 +27,7 @@ Include the following section verbatim:
 
 ### Development Environment & Tools
 - **Dependency Manager**: This project uses `uv`. 
-- **Python Execution**: Always use `uv run <command>` (e.g., `uv run pytest`, `uv run uvicorn ...`) unless the virtual environment is manually activated.
+- **Python Execution**: Always use `uv run <command>` for all tools and scripts (e.g., `uv run pytest`, `uv run ruff check ...`, `uv run uvicorn ...`) unless the virtual environment is manually activated. Running tools directly will likely fail due to missing dependencies in the host environment.
 - **Dependency Management**: Use `uv add <pkg>` or `uv add --dev <pkg>` to add dependencies. Use `uv sync` to ensure the environment is up to date.
 - **pytest**: Pytest is configured in `pyproject.toml` to automatically include the project root (`pythonpath = ["."]`).
 
