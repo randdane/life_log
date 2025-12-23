@@ -1,7 +1,11 @@
+"""Main application file for the LifeLog API."""
+
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
-from app.config import settings
 from minio import Minio
+
+from app.config import settings
 
 # MinIO Client Global
 minio_client = None
@@ -9,6 +13,10 @@ minio_client = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Handle application startup and shutdown events.
+
+    Initializes the MinIO client and ensures the required bucket exists.
+    """
     # Startup
     global minio_client
     print("Starting up LifeLog...")
@@ -38,9 +46,11 @@ app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
 @app.get("/health")
 def health_check():
+    """Check the health of the API."""
     return {"status": "ok", "app": settings.PROJECT_NAME}
 
 
 @app.get("/")
 def read_root():
+    """Root endpoint for the API."""
     return {"message": "Welcome to LifeLog API"}

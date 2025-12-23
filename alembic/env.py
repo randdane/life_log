@@ -1,3 +1,5 @@
+"""Alembic environment configuration for the LifeLog API."""
+
 import asyncio
 from logging.config import fileConfig
 
@@ -6,6 +8,11 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+
+# add your model's MetaData object here
+# for 'autogenerate' support
+from app.config import settings
+from app.models import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -16,10 +23,6 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-from app.models import Base
-from app.config import settings
 
 target_metadata = Base.metadata
 
@@ -57,6 +60,7 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
+    """Run migrations in 'online' mode."""
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
