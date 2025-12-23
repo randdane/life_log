@@ -4,12 +4,8 @@ LifeLog is a self-hosted, personal life-logging application designed for quick c
 
 ## Getting Started
 
-- Generate a random password for the admin user:
+- Generate a random passwords for necessary `.env` variables:
   - `$ openssl rand -base64 32`
-
-- Generate a random API token for the admin user:
-  - `$ python -c 'import uuid; print(uuid.uuid4())'`
-
 
 ## Features
 

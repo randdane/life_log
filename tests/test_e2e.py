@@ -11,9 +11,7 @@ BASE_URL = "http://localhost:8000"
 @pytest.fixture
 def auth_headers():
     """Get auth headers for API requests."""
-    if not settings.API_TOKEN:
-        pytest.fail("APP_AUTH_API_TOKEN is not set in environment")
-    return {"Authorization": f"Bearer {settings.API_TOKEN}"}
+    return {"Authorization": f"Bearer {settings.ADMIN_PASSWORD}"}
 
 
 def test_event_creation_with_attachment(auth_headers):

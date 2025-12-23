@@ -13,7 +13,7 @@ security_scheme = HTTPBearer(auto_error=False)
 async def get_current_token(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security_scheme)],
 ):
-    """Dependency to validate the API token from the request header.
+    """Dependency to validate the token from the request header.
 
     Args:
         credentials (HTTPAuthorizationCredentials): The credentials from the Authorization header.
@@ -22,11 +22,18 @@ async def get_current_token(
         str: The validated token.
 
     Raises:
-        HTTPException: If the token is invalid.
+        HTTPException: If the token is missing or invalid.
     """
-    token = credentials.credentials if credentials else None
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    if settings.API_TOKEN and token != settings.API_TOKEN:
+    token = credentials.credentials
+
+    if token != settings.ADMIN_PASSWORD:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

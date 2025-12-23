@@ -14,7 +14,6 @@ class Settings(BaseSettings):
 
     # Auth
     ADMIN_PASSWORD: str = Field(alias="APP_AUTH_ADMIN_PASSWORD")
-    API_TOKEN: str | None = Field(None, alias="APP_AUTH_API_TOKEN")
 
     # Database
     POSTGRES_USER: str
