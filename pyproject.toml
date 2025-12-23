@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
-    "sqlalchemy",
+    "sqlmodel",
     "asyncpg",
     "alembic",
     "python-multipart",

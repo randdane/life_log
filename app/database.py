@@ -1,7 +1,7 @@
 """Database configuration and session management for the LifeLog API."""
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase
+from sqlmodel import SQLModel
 
 from app.config import settings
 
@@ -15,8 +15,8 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-class Base(DeclarativeBase):
-    """Declarative base class for SQLAlchemy models."""
+class Base(SQLModel):
+    """Base class for SQLModel models."""
 
     pass
 

@@ -38,3 +38,8 @@ README.md
 # IDEs
 .vscode
 .idea
+
+# Data directories
+data-pgdata/
+data-minio/
+data-pgadmin/

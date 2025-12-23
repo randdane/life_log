@@ -30,6 +30,7 @@ python-dotenv==1.2.1
 python-multipart==0.0.21
 pyyaml==6.0.3
 sqlalchemy==2.0.45
+sqlmodel==0.0.27
 starlette==0.50.0
 typing-extensions==4.15.0
 typing-inspection==0.4.2
