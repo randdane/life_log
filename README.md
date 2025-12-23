@@ -29,6 +29,8 @@ Comprehensive documentation and planning files used to generate and guide this p
 - [`docs/AGENTS.md`](docs/AGENTS.md): Directives and context for AI agents working on the codebase.
 - [`docs/PROMPT_PLAN.md`](docs/PROMPT_PLAN.md): Strategic planning for AI-assisted development and prompting strategies.
 
+- **Tooling**: Managed by `uv` for fast dependency resolution and environment management.
+
 ## TODO
 
 - [ ] Convert to using `uv`.

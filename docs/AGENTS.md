@@ -25,6 +25,12 @@ Include the following section verbatim:
 - 'PROMPT_PLAN.md' - Agent-Ready Planner with per-step prompts, expected artifacts, tests, rollback notes, idempotency notes, and a TODO checklist using Markdown checkboxes. This file drives the agent workflow.
 - 'AGENTS.md' - This file. 
 
+### Development Environment & Tools
+- **Dependency Manager**: This project uses `uv`. 
+- **Python Execution**: Always use `uv run <command>` (e.g., `uv run pytest`, `uv run uvicorn ...`) unless the virtual environment is manually activated.
+- **Dependency Management**: Use `uv add <pkg>` or `uv add --dev <pkg>` to add dependencies. Use `uv sync` to ensure the environment is up to date.
+- **pytest**: Pytest is configured in `pyproject.toml` to automatically include the project root (`pythonpath = ["."]`).
+
 ### Agent responsibility
 - After completing any coding, refactor, or test step, **immediately update the corresponding TODO checklist item in 'PROMPT_PLAN.md'**.  
 - Use the same Markdown checkbox format ('- [x]') to mark completion.  

@@ -1,5 +1,6 @@
 """Configuration settings for the LifeLog API."""
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,8 +13,8 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api"
 
     # Auth
-    APP_AUTH_ADMIN_PASSWORD: str
-    APP_AUTH_API_TOKEN: str | None = None
+    ADMIN_PASSWORD: str = Field(alias="APP_AUTH_ADMIN_PASSWORD")
+    API_TOKEN: str | None = Field(None, alias="APP_AUTH_API_TOKEN")
 
     # Database
     POSTGRES_USER: str
