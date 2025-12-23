@@ -21,3 +21,37 @@ dependencies = [
     "pydantic-settings",
     "httpx",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "C",  # McCabe complexity
+    "F",  # pyflakes
+    "I",  # isort
+    "N",  # PEP-8 naming
+    "R",  # pyright
+    "S",  # flake8-bandit - security-related checks
+    "A",  # flake8-builtins - built-in name shadowing
+    "D",  # pydocstyle - docstring style
+    "B",  # flake8-bugbear - common programming errors
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "UP",  # pyupgrade - code modernization
+    "SIM",  # flake8-simplify - code simplification
+    "FAST", # FastAPI-specific checks
+]
+
+[tool.ruff.format]
+line-ending = "lf"
+docstring-code-format = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"  # Google docstring style
