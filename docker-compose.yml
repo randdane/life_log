@@ -75,7 +75,9 @@ services:
     ports:
       - "127.0.0.1:8080:80"
     volumes:
-      - ./data-pgadmin:/var/lib/pgadmin
+      # Docker Volume used instead of bind mount due to pgAdmin running as
+      # user ID 5050 (postgres) and needing write access to the data directory.
+      - pgadmin-data:/var/lib/pgadmin
     depends_on:
       db:
         condition: service_healthy
