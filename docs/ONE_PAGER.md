@@ -9,17 +9,17 @@ Core decisions (final)
 - Platform: Browser-accessible web app + CLI. API-first.
 - Backend: FastAPI with server-rendered Jinja2 templates and HTMX for small interactive flows.
 - DB: PostgreSQL with tsvector full-text search and GIN index.
-- File storage: MinIO (S3-compatible) included in docker-compose.
+- File storage: RustFS (S3-compatible) included in docker-compose.
 - Auth: Single admin password (provided by environment variable) for web UI; single API token for CLI/API.
 - Attachments: Multiple per event (configurable limit), default 10 MB per file, whitelist MIME types (images/docs/media).
-- Compose services: app, postgres, minio, pgadmin (pgAdmin bound to localhost only).
+- Compose services: app, postgres, rustfs, pgadmin (pgAdmin bound to localhost only).
 - Backups: Manual export endpoint + CLI export (no automated backups in MVP).
 - Migration tool: Alembic; ORM: SQLAlchemy.
 
 MVP scope (must-have)
 - API (FastAPI):
   - CRUD for events
-  - Attachments upload/download via MinIO
+  - Attachments upload/download via RustFS
   - Search endpoint (Postgres full-text tsvector + tag/date filters)
   - Export endpoint (JSON of events + attachment keys)
   - Token-based API auth
@@ -36,7 +36,7 @@ MVP scope (must-have)
   - CLI authenticates with API token
 - Storage & infra:
   - Postgres (with tsvector + GIN index)
-  - MinIO in compose with a default bucket
+  - RustFS in compose with a default bucket
   - pgAdmin available on host (127.0.0.1 only)
   - Single docker-compose for full stack
 - Security & limits:
@@ -59,7 +59,7 @@ Event model (MVP schema)
 - Table: attachments
   - id: BIGSERIAL PRIMARY KEY
   - event_id: FK -> events.id
-  - key: TEXT (S3/MinIO object key)
+  - key: TEXT (S3/RustFS object key)
   - filename: TEXT
   - content_type: TEXT
   - size_bytes: BIGINT
@@ -89,7 +89,7 @@ API surface (high-level)
   - GET /api/events/{id} — read event detail
   - PATCH /api/events/{id} — update event
   - DELETE /api/events/{id} — delete event
-  - POST /api/events/{id}/attachments — upload attachment (multipart/form-data => stream to MinIO)
+  - POST /api/events/{id}/attachments — upload attachment (multipart/form-data => stream to RustFS)
   - GET /api/attachments/{key} — proxy/download attachment (signed URL or server-stream with creds)
   - GET /api/search — search endpoint (q, tags, date range, pagination)
   - GET /api/export — export all events JSON (optionally return presigned URLs)
@@ -110,7 +110,7 @@ Web UI flow (UX)
 - Search/filters:
   - Text search, date range picker, multi-tag filter.
 - Settings:
-  - Rotate API token, configure file-size limit, view MinIO bucket name, change admin password (optionally).
+  - Rotate API token, configure file-size limit, view RustFS bucket name, change admin password (optionally).
 
 CLI
 - Lightweight Python CLI that uses same API with token.
@@ -128,24 +128,24 @@ Docker Compose (high-level)
     - ports: 0.0.0.0:8000:8000
     - env:
       - DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/lifelog
-      - MINIO_ENDPOINT=minio:9000
+      - RUSTFS_ENDPOINT=rustfs:9000
       - ADMIN_PASSWORD (provided via env at runtime)
       - API_TOKEN (optional; generated if missing)
       - FILE_MAX_BYTES (default 10_485_760)
       - ALLOWED_MIME_TYPES (comma separated)
-    - depends_on: db, minio
+    - depends_on: db, rustfs
     - volumes: ./data/uploads (optional) for local caching
     - entrypoint: run migrations (Alembic) then start Uvicorn
   - db (Postgres)
     - image: postgres:15
     - environment: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
     - volumes: pgdata:/var/lib/postgresql/data
-  - minio
-    - image: minio/minio
+  - rustfs
+    - image: rustfs/rustfs
     - command: server /data --console-address ":9001"
-    - environment: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
+    - environment: RUSTFS_ACCESS_KEY, RUSTFS_SECRET_KEY
     - ports: 9000:9000, 9001:9001
-    - volumes: minio-data:/data
+    - volumes: rustfs-data:/data
     - healthcheck: appropriate http check
   - pgadmin
     - image: dpage/pgadmin4
@@ -153,9 +153,9 @@ Docker Compose (high-level)
     - ports: 127.0.0.1:8080:80   # bound to localhost only (per spec)
     - volumes: pgadmin-data:/var/lib/pgadmin
 - Volumes:
-  - pgdata, minio-data, pgadmin-data
+  - pgdata, rustfs-data, pgadmin-data
 - Notes:
-  - App must create MinIO bucket on startup if missing (via minio client or SDK).
+  - App must create RustFS bucket on startup if missing (via rustfs client or SDK).
   - Alembic migrations run on app startup (entrypoint handles migrations).
 
 Environment variables (recommended defaults / names)
@@ -163,8 +163,8 @@ Environment variables (recommended defaults / names)
 - API_TOKEN (if omitted, app generates one and outputs to logs on first run)
 - DATABASE_URL (postgres connection)
 - POSTGRES_* for db container
-- MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
-- MINIO_BUCKET (default: lifelog-attachments)
+- RUSTFS_ACCESS_KEY, RUSTFS_SECRET_KEY
+- RUSTFS_BUCKET (default: lifelog-attachments)
 - FILE_MAX_BYTES (default: 10_485_760 -> 10 MB)
 - ATTACHMENT_MAX_PER_EVENT (default: 10)
 - ALLOWED_MIME_TYPES (default: image/jpeg,image/png,image/webp,application/pdf,text/plain,text/markdown,text/csv,video/mp4)
@@ -176,23 +176,23 @@ Attachment policy & security
 - Default max 10 MB per file (env-configurable).
 - Allowed MIME types whitelisted (images, pdf, plain text, csv, mp4). Block common executable types (.exe, .sh).
 - Validate content type and size server-side, and enforce limits before streaming full upload.
-- Store attachments in MinIO with non-guessable keys (UUID + original filename metadata).
+- Store attachments in RustFS with non-guessable keys (UUID + original filename metadata).
 - Prefer serving downloads via short-lived presigned URLs; if the app proxies downloads, ensure proper auth checks.
 - If exposing the app publicly, put a reverse proxy (Caddy/Traefik) in front with HTTPS and optional Basic auth.
 
 Operational notes
 - Migrations: Alembic + SQLAlchemy models. Entrypoint should run alembic upgrade head automatically.
-- Tests: unit tests for API handlers, storage interface (MinIO), search behavior, and CLI.
+- Tests: unit tests for API handlers, storage interface (RustFS), search behavior, and CLI.
 - CI: build image, run migrations, run test suite, lint (black/ruff).
 - Logging/observability: structured logs, file rotation for uploads if needed.
-- Backups: MVP relies on manual export (GET /api/export) and CLI export. Recommend a later cron job that dumps Postgres and uploads to MinIO (small container) when ready.
+- Backups: MVP relies on manual export (GET /api/export) and CLI export. Recommend a later cron job that dumps Postgres and uploads to RustFS (small container) when ready.
 
 Acceptance criteria (MVP)
 - Deployable via single docker-compose up.
 - Admin can log in via web UI using ADMIN_PASSWORD set via env on first run.
 - API token available (generated or set) and usable to authenticate CLI commands.
 - Able to create events via web UI quick-add and full form.
-- Attachments can be uploaded and associated with events; stored in MinIO.
+- Attachments can be uploaded and associated with events; stored in RustFS.
 - Search works via full-text query, tag filtering, date range.
 - Events can be exported as JSON via UI and CLI.
 - pgAdmin is accessible at http://127.0.0.1:8080 and can connect to the Postgres container.
@@ -205,7 +205,7 @@ Implementation recommendations for engineering
   - SQLAlchemy (1.x) + asyncpg / async SQLAlchemy usage
   - Alembic for migrations
   - python-multipart for uploads
-  - minio-py or boto3 for MinIO interactions
+  - minio-py or boto3 for RustFS interactions
   - passlib for password hashing
   - python-dotenv support for env file in development
 - DB tsvector:
@@ -229,7 +229,7 @@ Security checklist (MVP)
 - If exposing publicly, require TLS and a reverse proxy with additional auth as needed.
 
 Roadmap / Next steps (post-MVP)
-- Optional: automated daily backups (pg_dump + upload to MinIO).
+- Optional: automated daily backups (pg_dump + upload to RustFS).
 - Optional: thumbnail/preview generation for images & videos.
 - Optional: full user accounts / multi-tenant support.
 - Optional: richer analytics, timeline visualizations.
@@ -239,7 +239,7 @@ Roadmap / Next steps (post-MVP)
 Deliverables for technical-spec stage (what product & engineering leadership need next)
 - Detailed API spec (OpenAPI) with request/response examples and error codes.
 - DB schema SQL & Alembic migration initial script.
-- Docker-compose YAML with service definitions (app, db, minio, pgadmin) and default env sample file (.env.example).
+- Docker-compose YAML with service definitions (app, db, rustfs, pgadmin) and default env sample file (.env.example).
 - Minimal UI wireframes for timeline, quick-add, full event form, event detail, settings.
 - Security & deployment checklist (reverse proxy config examples for Caddy/Traefik).
 - Implementation plan with rough sprint estimate (see suggested breakdown below).
@@ -250,7 +250,7 @@ Estimated implementation breakdown (indicative)
 - Week 1 — models & API:
   - Implement events/attachments models, migrations, basic CRUD endpoints.
 - Week 2 — storage & uploads:
-  - Integrate MinIO, implement upload endpoints, object key management, validations.
+  - Integrate RustFS, implement upload endpoints, object key management, validations.
 - Week 3 — search & indexes:
   - tsvector generation, GIN index, search endpoint.
 - Week 4 — web UI + HTMX:
@@ -262,15 +262,15 @@ Estimated implementation breakdown (indicative)
 
 Contact / owner
 - Product owner: (you)
-- Suggested engineering lead: backend with FastAPI experience + ops/devops for docker-compose and MinIO.
+- Suggested engineering lead: backend with FastAPI experience + ops/devops for docker-compose and RustFS.
 
 Appendix: key defaults to include in .env.example
 - ADMIN_PASSWORD=CHANGE_ME
 - API_TOKEN= # optional; auto-generated if blank
 - DATABASE_URL=postgresql+asyncpg://lifelog:lifelogpass@db:5432/lifelog
-- MINIO_ROOT_USER=minioadmin
-- MINIO_ROOT_PASSWORD=minioadmin
-- MINIO_BUCKET=lifelog-attachments
+- RUSTFS_ACCESS_KEY=rustfsadmin
+- RUSTFS_SECRET_KEY=rustfsadmin
+- RUSTFS_BUCKET=lifelog-attachments
 - FILE_MAX_BYTES=10485760
 - ATTACHMENT_MAX_PER_EVENT=10
 - ALLOWED_MIME_TYPES=image/jpeg,image/png,image/webp,application/pdf,text/plain,text/markdown,text/csv,video/mp4

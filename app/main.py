@@ -14,33 +14,33 @@ from app.database import get_db
 from app.dependencies import get_current_token
 from app.schemas import PaginatedEvents, SortOrder
 
-# MinIO Client Global
-minio_client = None
+# RustFS Client Global
+rustfs_client = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle application startup and shutdown events.
 
-    Initializes the MinIO client and ensures the required bucket exists.
+    Initializes the RustFS client and ensures the required bucket exists.
     """
     # Startup
-    global minio_client
+    global rustfs_client
     print("Starting up LifeLog...")
 
-    # Initialize MinIO
+    # Initialize RustFS
     try:
-        minio_client = Minio(
-            settings.MINIO_ENDPOINT,
-            access_key=settings.MINIO_ROOT_USER,
-            secret_key=settings.MINIO_ROOT_PASSWORD,
-            secure=settings.MINIO_SECURE,
+        rustfs_client = Minio(
+            settings.RUSTFS_ENDPOINT,
+            access_key=settings.RUSTFS_ACCESS_KEY,
+            secret_key=settings.RUSTFS_SECRET_KEY,
+            secure=settings.RUSTFS_SECURE,
         )
-        if not minio_client.bucket_exists(settings.MINIO_BUCKET):
-            minio_client.make_bucket(settings.MINIO_BUCKET)
-            print(f"Created MinIO bucket: {settings.MINIO_BUCKET}")
+        if not rustfs_client.bucket_exists(settings.RUSTFS_BUCKET):
+            rustfs_client.make_bucket(settings.RUSTFS_BUCKET)
+            print(f"Created RustFS bucket: {settings.RUSTFS_BUCKET}")
     except Exception as e:
-        print(f"Error connecting to MinIO: {e}")
+        print(f"Error connecting to RustFS: {e}")
 
     yield
 

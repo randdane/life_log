@@ -1,4 +1,4 @@
-"""Service layer for handling MinIO storage operations."""
+"""Service layer for handling RustFS storage operations."""
 
 import asyncio
 import os
@@ -12,28 +12,28 @@ from app.config import settings
 
 
 class StorageService:
-    """Service layer for MinIO storage operations."""
+    """Service layer for RustFS storage operations."""
 
     def __init__(self):
-        """Initialize the MinIO client."""
+        """Initialize the RustFS client."""
         self.client = Minio(
-            settings.MINIO_ENDPOINT,
-            access_key=settings.MINIO_ROOT_USER,
-            secret_key=settings.MINIO_ROOT_PASSWORD,
-            secure=settings.MINIO_SECURE,
+            settings.RUSTFS_ENDPOINT,
+            access_key=settings.RUSTFS_ACCESS_KEY,
+            secret_key=settings.RUSTFS_SECRET_KEY,
+            secure=settings.RUSTFS_SECURE,
         )
 
     async def upload_file(
         self, file_data: BinaryIO, filename: str, content_type: str, size: int
     ) -> str:
-        """Upload a file to MinIO and return the generated key."""
+        """Upload a file to RustFS and return the generated key."""
         # Generate unique key
         ext = os.path.splitext(filename)[1]
         key = f"{uuid.uuid4().hex}{ext}"
 
         await asyncio.to_thread(
             self.client.put_object,
-            settings.MINIO_BUCKET,
+            settings.RUSTFS_BUCKET,
             key,
             file_data,
             size,
@@ -45,14 +45,14 @@ class StorageService:
         """Generate a presigned URL for downloading a file."""
         return await asyncio.to_thread(
             self.client.presigned_get_object,
-            settings.MINIO_BUCKET,
+            settings.RUSTFS_BUCKET,
             key,
             expires=timedelta(minutes=expires_minutes),
         )
 
     async def delete_file(self, key: str):
-        """Delete a file from MinIO."""
-        await asyncio.to_thread(self.client.remove_object, settings.MINIO_BUCKET, key)
+        """Delete a file from RustFS."""
+        await asyncio.to_thread(self.client.remove_object, settings.RUSTFS_BUCKET, key)
 
 
 storage_service = StorageService()

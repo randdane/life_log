@@ -4,7 +4,43 @@ LifeLog is a self-hosted, personal life-logging application designed for quick c
 
 ## Getting Started
 
-- Generate a random passwords for necessary `.env` variables:
+### 1. Prerequisites
+- [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/)
+
+### 2. Setup
+1.  **Configure environment variables**:
+    Copy the example environment file and update the passwords:
+    ```bash
+    cp .env.example .env
+    ```
+    Open `.env` and set secure values for `APP_AUTH_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, and `RUSTFS_SECRET_KEY`.
+
+2.  **Start the application**:
+    ```bash
+    docker-compose up -d
+    ```
+    This will start the API, PostgreSQL database, RustFS (S3-compatible storage), and pgAdmin.
+
+### 3. Verify it's working
+To ensure everything is set up correctly, use `curl` to add your first life log event:
+
+```bash
+# Replace YOUR_ADMIN_PASSWORD with the one set in your .env
+curl -X POST http://localhost:8000/api/events/ \
+  -H "Authorization: Bearer YOUR_ADMIN_PASSWORD" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Initial Setup Complete",
+    "description": "LifeLog is up and running!",
+    "tags": ["setup", "log"]
+  }'
+```
+
+You should receive a `201 Created` response with the details of your new event.
+
+## Tips
+
+- Generate random passwords for necessary `.env` variables:
   - `$ openssl rand -base64 32`
 
 ## Features
@@ -13,7 +49,7 @@ LifeLog is a self-hosted, personal life-logging application designed for quick c
 - **Web Interface**: Simple, server-rendered UI for browsing timelines and capturing events.
 - **CLI Tool**: Efficient command-line interface for quick entry and bulk operations.
 - **Search**: Full-text search capabilities using PostgreSQL `tsvector`.
-- **Storage**: S3-compatible object storage (MinIO) for handling attachments.
+- **Storage**: S3-compatible object storage (RustFS) for handling attachments.
 - **Self-Hosted**: Runs entirely in a local Docker Compose stack for privacy and control.
 
 ## Documentation

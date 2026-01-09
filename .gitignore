@@ -76,5 +76,5 @@ dmypy.json
 
 # Custome app-specific data directories
 data-pgdata/
-data-minio/
+data-rustfs/
 data-pgadmin/

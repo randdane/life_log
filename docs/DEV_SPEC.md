@@ -2,7 +2,7 @@
 
 Version: 1.0  
 Author: Product Owner / Engineering Lead  
-Target: Backend + API-first implementation with minimal web UI and CLI (FastAPI, PostgreSQL, MinIO)
+Target: Backend + API-first implementation with minimal web UI and CLI (FastAPI, PostgreSQL, RustFS)
 
 ---
 
@@ -35,7 +35,7 @@ Table of contents
 Summary & Goals
 - Provide a self-hosted, low-maintenance personal life-log (events with metadata and attachments).
 - API-first design: FastAPI backend, Jinja2 + HTMX minimal web UI, Python CLI.
-- Persist events in PostgreSQL; attachments stored in MinIO (S3-compatible).
+- Persist events in PostgreSQL; attachments stored in RustFS (S3-compatible).
 - Single docker-compose stack for local deploy.
 - Focus on fast reliable capture, search, and export.
 - Target single admin user (single API token + admin password).
@@ -43,7 +43,7 @@ Summary & Goals
 Scope (MVP)
 - API:
   - CRUD endpoints for events
-  - Attachments upload/download via MinIO
+  - Attachments upload/download via RustFS
   - Search endpoint (Postgres full-text + tag/date filters)
   - Export endpoint (JSON with attachment keys)
   - Token-based API auth
@@ -53,7 +53,7 @@ Scope (MVP)
   - create-event, attach-file, export
 - Storage & infra:
   - Postgres with tsvector & GIN index
-  - MinIO with default bucket
+  - RustFS with default bucket
   - pgAdmin bound to 127.0.0.1
 - Security & limits:
   - Admin password via env for UI
@@ -73,20 +73,20 @@ High-level architecture
 - FastAPI app exposing REST endpoints + server-rendered UI (Jinja2 + HTMX).
 - SQLAlchemy (async) for DB models; Alembic for migrations.
 - PostgreSQL for relational storage and full-text search (tsvector + GIN).
-- MinIO as S3-compatible object store for attachments.
-- Docker-compose to run app, db, minio, pgadmin.
+- RustFS as S3-compatible object store for attachments.
+- Docker-compose to run app, db, rustfs, pgadmin.
 - CLI: Python script using API (token auth).
 
 Components & responsibilities
 - app (FastAPI)
   - Routing, business logic, authentication, validation
   - Database access (SQLAlchemy async + asyncpg)
-  - MinIO client interactions
+  - RustFS client interactions
   - Runs migrations on startup (Alembic)
 - db (Postgres)
   - events, attachments tables
   - tsvector column and GIN index
-- minio (MinIO)
+- rustfs (RustFS)
   - attachments bucket
 - pgadmin (management UI, bound to localhost)
 - CLI (Python)
@@ -112,7 +112,7 @@ Core tables:
 2) attachments
 - id: BIGSERIAL PRIMARY KEY
 - event_id: BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE
-- key: TEXT NOT NULL UNIQUE  -- S3/MinIO object key (UUID-based)
+- key: TEXT NOT NULL UNIQUE  -- S3/RustFS object key (UUID-based)
 - filename: TEXT NOT NULL
 - content_type: TEXT NOT NULL
 - size_bytes: BIGINT NOT NULL
@@ -248,7 +248,7 @@ Key endpoints (representative request/response shapes):
 - Response 200 updated event.
 
 5) DELETE /api/events/{id}
-- Delete event and cascade-delete attachments in DB and optionally delete objects in MinIO.
+- Delete event and cascade-delete attachments in DB and optionally delete objects in RustFS.
 - Response 204 No Content
 
 6) POST /api/events/{id}/attachments
@@ -256,7 +256,7 @@ Key endpoints (representative request/response shapes):
 - Server-side validates mime, size and per-event count.
 - For each file:
   - Generate key: uuid4 hex + ext
-  - Stream upload to MinIO and create attachments DB row atomically (DB transaction).
+  - Stream upload to RustFS and create attachments DB row atomically (DB transaction).
   - Return attachment metadata: { "id": 1, "filename": "...", "key": "...", "content_type": "...", "size_bytes": ... , "uploaded_at": "..." }
 - Responses:
   - 201 Created with list of attachments
@@ -267,7 +267,7 @@ Key endpoints (representative request/response shapes):
 7) GET /api/attachments/{key}
 - Download endpoint or redirect to presigned URL.
 - Two modes (configurable):
-  - Server generates presigned URL from MinIO and returns JSON { "url": "https://..." } OR
+  - Server generates presigned URL from RustFS and returns JSON { "url": "https://..." } OR
   - App proxies stream the object while enforcing auth.
 - Recommended: return presigned URL (short-lived), unless proxied mode requested.
 
@@ -347,21 +347,21 @@ Attachment upload flow
    - Optionally detect content-type by reading first bytes (magic) for stronger validation.
 4. Generate object key: <uuid4 hex>/<timestamp>__<safe-filename>
    - Keep original filename as metadata in DB and object metadata.
-5. Upload to MinIO:
+5. Upload to RustFS:
    - Use minio-py or boto3; since they are blocking, perform upload in an I/O thread (asyncio.to_thread) or use an async wrapper.
    - Set content-type and metadata (filename).
 6. On successful upload, create attachments DB row inside same transaction scope where possible; if object uploaded but DB insert fails, delete the object to avoid orphan objects.
 7. Return attachment metadata.
 
 Serving attachments
-- Preferred: return presigned URL (signed, short-lived) from MinIO SDK.
+- Preferred: return presigned URL (signed, short-lived) from RustFS SDK.
   - API: GET /api/attachments/{key}?presign=1 returns { "url": "..." }
 - Alternate: app proxies the object and streams to client while enforcing auth. This increases CPU/bandwidth load on app.
 
 Object lifecycle
 - Deleting an event should:
   - Delete attachments DB rows (ON DELETE CASCADE).
-  - Delete objects from MinIO (best-effort; do in background job if too many).
+  - Delete objects from RustFS (best-effort; do in background job if too many).
 - Garbage collection: optional cron to find orphaned objects.
 
 Security
@@ -369,14 +369,14 @@ Security
 - Validate filenames; do not use user-provided filename as storage key without normalization.
 - Limit per-event and per-file sizes, reject early.
 
-MinIO best practices
-- Require MinIO bucket at startup; app should create bucket if missing.
-- Use server-side encryption on MinIO if available (optional).
-- Configure MinIO credentials via env variables and avoid embedding in logs.
+RustFS best practices
+- Require RustFS bucket at startup; app should create bucket if missing.
+- Use server-side encryption on RustFS if available (optional).
+- Configure RustFS credentials via env variables and avoid embedding in logs.
 
 Uploading large files
 - Use streaming UploadFile handling; avoid fully reading file into memory.
-- For large file support in FastAPI, read upload chunks and stream to MinIO SDK put_object which can accept file-like objects or direct streaming.
+- For large file support in FastAPI, read upload chunks and stream to RustFS SDK put_object which can accept file-like objects or direct streaming.
 
 ---
 
@@ -410,8 +410,8 @@ Services:
 - app (FastAPI)
   - Build from repo Dockerfile
   - Ports: 8000:8000
-  - Depends on: db, minio
-  - Env: DATABASE_URL, MINIO_ENDPOINT, MINIO_* credentials, ADMIN_PASSWORD, etc.
+  - Depends on: db, rustfs
+  - Env: DATABASE_URL, RUSTFS_ENDPOINT, RUSTFS_* credentials, ADMIN_PASSWORD, etc.
   - Entrypoint: run migrations (alembic upgrade head) then start uvicorn
   - Mount volumes for logs if desired
 
@@ -419,11 +419,11 @@ Services:
   - POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
   - Volume: pgdata
 
-- minio (minio/minio)
+- rustfs (rustfs/rustfs)
   - Command: server /data --console-address ":9001"
   - Ports: 9000:9000, 9001:9001
-  - Env: MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
-  - Volume: minio-data
+  - Env: RUSTFS_ACCESS_KEY, RUSTFS_SECRET_KEY
+  - Volume: rustfs-data
 
 - pgadmin (dpage/pgadmin4)
   - Expose on 127.0.0.1:8080 only (host bound)
@@ -431,12 +431,12 @@ Services:
   - Volume: pgadmin-data
 
 Volumes:
-- pgdata, minio-data, pgadmin-data
+- pgdata, rustfs-data, pgadmin-data
 
 App responsibilities at startup:
-- Wait for Postgres and MinIO readiness.
+- Wait for Postgres and RustFS readiness.
 - Run Alembic migrations automatically.
-- Ensure MinIO bucket exists; create if missing.
+- Ensure RustFS bucket exists; create if missing.
 - Generate API token if not provided (log a warning to stdout with token; store hashed in DB).
 - Initialize admin password state (optionally persist hashed admin password in DB).
 
@@ -451,10 +451,10 @@ Environment variables (.env.example)
 - POSTGRES_USER=lifelog
 - POSTGRES_PASSWORD=lifelogpass
 - POSTGRES_DB=lifelog
-- MINIO_ROOT_USER=minioadmin
-- MINIO_ROOT_PASSWORD=minioadmin
-- MINIO_ENDPOINT=minio:9000
-- MINIO_BUCKET=lifelog-attachments
+- RUSTFS_ACCESS_KEY=rustfsadmin
+- RUSTFS_SECRET_KEY=rustfsadmin
+- RUSTFS_ENDPOINT=rustfs:9000
+- RUSTFS_BUCKET=lifelog-attachments
 - FILE_MAX_BYTES=10485760
 - ATTACHMENT_MAX_PER_EVENT=10
 - ALLOWED_MIME_TYPES=image/jpeg,image/png,image/webp,application/pdf,text/plain,text/markdown,text/csv,video/mp4
@@ -506,7 +506,7 @@ Attachment limits
 Security
 - Store admin password & API token hashed.
 - pgAdmin bound to localhost.
-- Avoid exposing MinIO console outside trusted network.
+- Avoid exposing RustFS console outside trusted network.
 - If publicly exposing app, place a reverse proxy (Caddy/Traefik) with TLS and optional extra auth.
 
 Rate limiting (optional)
@@ -518,7 +518,7 @@ Concurrency, performance & operational notes
 
 Concurrency model
 - Use async FastAPI + async SQLAlchemy + asyncpg for DB concurrency.
-- MinIO SDK likely blocking (minio-py); run pushes in thread pool (asyncio.to_thread / run_in_executor) or use aioboto3/aiobotocore wrapper.
+- RustFS SDK likely blocking (minio-py); run pushes in thread pool (asyncio.to_thread / run_in_executor) or use aioboto3/aiobotocore wrapper.
 
 Resource controls
 - Limit max concurrent uploads to prevent memory pressure (e.g., semaphore).
@@ -526,13 +526,13 @@ Resource controls
 
 Streaming & memory usage
 - Use streaming UploadFile to avoid loading entire file into memory.
-- Use chunked uploads to MinIO.
+- Use chunked uploads to RustFS.
 
 Scaling notes
 - MVP is single instance; future scaling requires separating services (object store, DB replica, web server behind reverse proxy).
 
 Operational tasks
-- Ensure healthchecks for db and minio in docker-compose.
+- Ensure healthchecks for db and rustfs in docker-compose.
 - Provide script to run Alembic migrations locally and in CI.
 
 ---
@@ -560,17 +560,17 @@ Logging
 - On token generation, log only once and indicate secured storage required.
 
 Metrics & health
-- /health endpoint that checks DB connectivity and MinIO access.
+- /health endpoint that checks DB connectivity and RustFS access.
 - Expose /metrics (prometheus) if desired (optional).
 
 Backups
 - MVP: manual export endpoint and CLI export.
-- Post-MVP: scheduled pg_dump + upload to MinIO or remote backup.
+- Post-MVP: scheduled pg_dump + upload to RustFS or remote backup.
 
 Disaster recovery
 - Provide scripts to:
   - dump DB with pg_dump
-  - export attachments from MinIO
+  - export attachments from RustFS
   - restore procedure documented in README
 
 ---
@@ -579,15 +579,15 @@ Testing plan
 
 Testing goals
 - Ensure correctness of API behavior, DB interactions, file upload/serve, auth flows.
-- Provide reliable integration testing with real Postgres and MinIO containers.
+- Provide reliable integration testing with real Postgres and RustFS containers.
 
 Test types
 1) Unit tests
 - Test business logic, validation, utilities (tag parsing, key generation).
-- Use pytest and monkeypatch dependencies (MinIO client wrappers) for fast runs.
+- Use pytest and monkeypatch dependencies (RustFS client wrappers) for fast runs.
 
 2) Integration tests
-- Use testcontainers-python or docker-compose for ephemeral Postgres and MinIO.
+- Use testcontainers-python or docker-compose for ephemeral Postgres and RustFS.
 - Run real migrations, create bucket, run full HTTP tests using httpx AsyncClient or requests.
 - Tests:
   - Event lifecycle (create, read, update, delete)
@@ -608,7 +608,7 @@ Test types
 Test harness & utilities
 - Provide test fixtures for:
   - ephemeral DB URL (from testcontainers)
-  - MinIO client creds and bucket pre-creation
+  - RustFS client creds and bucket pre-creation
   - cleanup routines for buckets and DB between tests
 
 CI-friendly
@@ -617,7 +617,7 @@ CI-friendly
 
 Sample testcases (priority)
 - Create event via API; confirm created_at, timestamp and search_vector generate correctly.
-- Upload a valid image file; verify row in attachments and object in MinIO.
+- Upload a valid image file; verify row in attachments and object in RustFS.
 - Reject oversized file (413).
 - Search by text and tag; confirm results ordering and counts.
 - Rotate API token; previous token fails after rotation.
@@ -632,7 +632,7 @@ CI pipeline
   2. Install dependencies (use pinned pip requirements)
   3. Lint (ruff/flake8), format check (black)
   4. Run unit tests
-  5. Start testcontainers (Postgres + MinIO) and run integration tests
+  5. Start testcontainers (Postgres + RustFS) and run integration tests
   6. Build Docker image (optionally)
 - Use GitHub Actions or GitLab CI. Use matrix if testing multiple Python versions.
 
@@ -647,7 +647,7 @@ Acceptance criteria (MVP)
 - Admin can log into web UI using ADMIN_PASSWORD env var.
 - API token present (either generated or provided) and can be used for CLI.
 - Create events via quick-add and full form.
-- Upload attachments (subject to MIME/size limits) stored in MinIO.
+- Upload attachments (subject to MIME/size limits) stored in RustFS.
 - Search works: full-text + tag + date range.
 - Export endpoint returns JSON for all events with attachment keys.
 - pgAdmin available at http://127.0.0.1:8080 and can connect to Postgres container.
@@ -673,7 +673,7 @@ Week 2 — API basics
 - Unit tests for event endpoints
 
 Week 3 — attachments & storage
-- Integrate MinIO client, create bucket at startup
+- Integrate RustFS client, create bucket at startup
 - Implement attachments upload/download endpoints
 - Validate MIME & size; ensure streaming uploads
 - Test upload flows thoroughly
@@ -709,12 +709,12 @@ def make_object_key(filename: str) -> str:
     safe = secure_filename(filename)[:128]  # implement sanitize
     return f"{uid}/{ts}__{safe}"
 
-C. MinIO interactions (notes)
+C. RustFS interactions (notes)
 - Use minio-py for simplicity and reliability (synchronous):
   - from minio import Minio
   - client.put_object(bucket, object_name, data_stream, length, content_type=...)
 - For async app, wrap blocking calls:
-  - await asyncio.to_thread(minio_client.put_object, ...)
+  - await asyncio.to_thread(rustfs_client.put_object, ...)
 - Create bucket on startup:
   if not client.bucket_exists(bucket):
       client.make_bucket(bucket)
@@ -726,7 +726,7 @@ services:
     build: .
     ports: ["8000:8000"]
     env_file: .env
-    depends_on: ["db","minio"]
+    depends_on: ["db","rustfs"]
   db:
     image: postgres:15
     environment:
@@ -735,17 +735,17 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
-  minio:
-    image: minio/minio
+  rustfs:
+    image: rustfs/rustfs
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio-data:/data
+      - rustfs-data:/data
   pgadmin:
     image: dpage/pgadmin4
     environment:
@@ -755,7 +755,7 @@ services:
       - "127.0.0.1:8080:80"
 volumes:
   pgdata:
-  minio-data:
+  rustfs-data:
 
 E. Example API request (curl)
 # Create event
@@ -775,16 +775,16 @@ Content-Type: application/json
 
 G. Testing recommendations (technical)
 - Use pytest-asyncio to test async endpoints.
-- Use testcontainers-python (PostgresContainer, GenericContainer for MinIO) to run integrations reliably in CI.
+- Use testcontainers-python (PostgresContainer, GenericContainer for RustFS) to run integrations reliably in CI.
 - Fixtures:
-  - give each test a randomly named MinIO bucket or use a test prefix to avoid interference.
+  - give each test a randomly named RustFS bucket or use a test prefix to avoid interference.
   - create and teardown buckets in fixture scope.
 
 H. Security checklist (MVP)
 - Set ADMIN_PASSWORD in .env on deploy; do not commit secrets.
 - Ensure pgAdmin port is host-bound.
 - Enforce ALLOWED_MIME_TYPES and FILE_MAX_BYTES server-side.
-- Use presigned URLs for object downloads to avoid exposing MinIO.
+- Use presigned URLs for object downloads to avoid exposing RustFS.
 - Store tokens hashed; rotate tokens via admin route.
 
 ---

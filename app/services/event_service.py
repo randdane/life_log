@@ -113,7 +113,7 @@ class EventService:
         await db.delete(db_event)
         await db.commit()
 
-        # Delete from MinIO after DB commit for safety
+        # Delete from RustFS after DB commit for safety
         import contextlib
 
         for key in attachment_keys:

@@ -67,7 +67,7 @@ async def upload_attachments(
                 detail=f"File {file.filename} exceeds max size of {settings.FILE_MAX_BYTES} bytes.",
             )
 
-        # Upload to MinIO
+        # Upload to RustFS
         key = await storage_service.upload_file(
             BytesIO(file_content), file.filename, file.content_type, size
         )

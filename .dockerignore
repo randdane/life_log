@@ -41,5 +41,5 @@ README.md
 
 # Data directories
 data-pgdata/
-data-minio/
+data-rustfs/
 data-pgadmin/

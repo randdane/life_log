@@ -47,7 +47,7 @@ Stages (milestones):
 2. Database connectivity & migrations (async SQLAlchemy, Alembic, run migrations on startup).
 3. Models & migrations (events + attachments + indices + search vector).
 4. CRUD API endpoints for events (with Pydantic schemas and validation, unit/integration tests).
-5. Attachments: MinIO integration, upload endpoint, validated streaming uploads, DB rows.
+5. Attachments: RustFS integration, upload endpoint, validated streaming uploads, DB rows.
 6. Attachment serving: presigned URLs and optional proxy; deletion/cascade handling.
 7. Search endpoint with full-text + tag/date filters and rank.
 8. Auth (admin password web session + bearer token with rotation).
@@ -66,7 +66,7 @@ SECTION B — Iteratively refined prompt chunks
 Note: Each prompt must be executed in order. Every code-generation prompt asks the LLM to produce code and tests. After the code is generated, run tests (automated) and perform manual verifications indicated.
 
 PROMPT 0 — Scaffolding & Healthcheck (repo skeleton, Docker, lint/test config)
-- Goal: Create a reproducible repo skeleton with a minimal FastAPI app, health endpoint, Dockerfile, docker-compose skeleton (db+minio stubs), basic lint/test config, and CI skeleton. Add a unit test for /health.
+- Goal: Create a reproducible repo skeleton with a minimal FastAPI app, health endpoint, Dockerfile, docker-compose skeleton (db+rustfs stubs), basic lint/test config, and CI skeleton. Add a unit test for /health.
 - Why first: Provides foundation for integration tests, CI, and incremental work.
 
 Code-generation prompt:
@@ -76,13 +76,13 @@ You are creating the initial scaffolding for the LifeLog project.
 Tasks:
 1. Create a Python project layout (use either pyproject.toml with poetry / pip + requirements.txt — choose requirements.txt for portability).
 2. Implement a minimal FastAPI app at app/main.py exposing:
-   - GET /health -> returns JSON { "status": "ok", "db": "unknown", "minio": "unknown" }
+   - GET /health -> returns JSON { "status": "ok", "db": "unknown", "rustfs": "unknown" }
    - Configure uvicorn startup entry in app/main.py.
 3. Add a Dockerfile for the app that installs requirements and runs uvicorn.
 4. Add a docker-compose.yml with placeholders/services for:
-   - app (build .), db (postgres image), minio (minio/minio), pgadmin (bound to 127.0.0.1:8080)
+   - app (build .), db (postgres image), rustfs (rustfs/rustfs), pgadmin (bound to 127.0.0.1:8080)
    - Ensure docker-compose keeps simple defaults but does not require secrets (pull values from .env).
-5. Add .env.example with variables used in dev (DATABASE_URL, MINIO_ENDPOINT, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, ADMIN_PASSWORD, API_TOKEN).
+5. Add .env.example with variables used in dev (DATABASE_URL, RUSTFS_ENDPOINT, RUSTFS_ACCESS_KEY, RUSTFS_SECRET_KEY, ADMIN_PASSWORD, API_TOKEN).
 6. Add basic dev tooling config:
    - requirements.txt with FastAPI, uvicorn, pytest, pytest-asyncio, httpx, sqlalchemy (latest async-compatible), alembic, python-dotenv, ruff, black.
    - pre-commit config specifying black and ruff hooks (optional).
@@ -94,7 +94,7 @@ Tasks:
 
 Requirements for generated code:
 - All code must be self-contained and runnable locally with only docker-compose (optional) and Python.
-- Tests should pass in CI run (they should not depend on DB/MinIO at this step).
+- Tests should pass in CI run (they should not depend on DB/RustFS at this step).
 - Provide instructions in README for running the test and starting the app.
 
 Deliverables:
@@ -111,7 +111,7 @@ Return:
 Verification & manual steps:
 - Run pip install -r requirements.txt and pytest; ensure tests pass.
 - Start app: python -m uvicorn app.main:app --reload; verify http://localhost:8000/health returns expected JSON.
-- Optionally: docker-compose up to ensure app container builds (db/minio may show errors - that's ok for now).
+- Optionally: docker-compose up to ensure app container builds (db/rustfs may show errors - that's ok for now).
 
 Checklist:
 - [ ] Create project layout and files per prompt
@@ -213,7 +213,7 @@ Tasks:
    - Creates B-tree index on events.timestamp
    - Creates GIN index on tags (events) if using text[]
    - If generated column for tsvector is unsupported, implement trigger-based tsvector_update_trigger in migration
-3. Modify app startup to run alembic upgrade head automatically (opt-in via env var RUN_MIGRATIONS=true) and create the MinIO bucket placeholder (we'll do actual creation in an attachments prompt).
+3. Modify app startup to run alembic upgrade head automatically (opt-in via env var RUN_MIGRATIONS=true) and create the RustFS bucket placeholder (we'll do actual creation in an attachments prompt).
 4. Add unit/integration tests tests/test_models.py:
    - Use testcontainers Postgres to run migration, then connect and:
      - Insert an event via ORM and assert the row exists.
@@ -312,19 +312,19 @@ Checklist:
 
 ---
 
-PROMPT 4 — Attachments backend (MinIO integration & upload endpoint)
-- Goal: Integrate MinIO, implement attachment upload endpoint (multipart/form-data), streaming upload to MinIO, validation (MIME, size, per-event limit), atomic DB/object behavior, and tests using MinIO container.
+PROMPT 4 — Attachments backend (RustFS integration & upload endpoint)
+- Goal: Integrate RustFS, implement attachment upload endpoint (multipart/form-data), streaming upload to RustFS, validation (MIME, size, per-event limit), atomic DB/object behavior, and tests using RustFS container.
 - Rationale: Attachments are essential to LifeLog; must be robust and tested.
 
 Code-generation prompt:
 ```text
-Implement attachments support with MinIO integration and upload endpoints.
+Implement attachments support with RustFS integration and upload endpoints.
 
 Tasks:
-1. Add MinIO client wrapper in app/services/storage.py:
-   - Use minio (minio-py). Because minio-py is blocking, wrap calls with asyncio.to_thread where appropriate.
+1. Add RustFS client wrapper in app/services/storage.py:
+   - Use rustfs (minio-py). Because minio-py is blocking, wrap calls with asyncio.to_thread where appropriate.
    - Add functions: ensure_bucket(bucket_name), upload_object(bucket, object_name, fileobj, length, content_type, metadata), presign_get(bucket, object_name, expires_seconds), delete_object(bucket, object_name).
-   - Configure via env vars: MINIO_ENDPOINT, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, MINIO_BUCKET.
+   - Configure via env vars: RUSTFS_ENDPOINT, RUSTFS_ACCESS_KEY, RUSTFS_SECRET_KEY, RUSTFS_BUCKET.
 2. Implement endpoint POST /api/events/{id}/attachments:
    - Accept multipart/form-data with files (multiple).
    - Validate:
@@ -333,13 +333,13 @@ Tasks:
      - Per-event attachments <= ATTACHMENT_MAX_PER_EVENT.
    - For each file:
      - Generate object key: uuid4hex + "/" + timestamp + "__" + safe_filename (implement safe sanitize).
-     - Stream upload to MinIO via storage wrapper.
+     - Stream upload to RustFS via storage wrapper.
      - On success, insert attachments DB row in same logical operation; ensure if DB insert fails after object upload, delete object (compensating action).
    - Return attachment metadata list (id, filename, key, content_type, size_bytes, uploaded_at).
 3. Ensure app startup calls ensure_bucket to create bucket if missing.
 4. Tests:
-   - tests/test_attachments.py using testcontainers MinIO container:
-     - Upload a small valid file and assert DB row created and object exists in MinIO (use storage client to stat or presign URL fetch).
+   - tests/test_attachments.py using testcontainers RustFS container:
+     - Upload a small valid file and assert DB row created and object exists in RustFS (use storage client to stat or presign URL fetch).
      - Attempt to upload an oversized file and assert 413 returned.
      - Attempt to upload disallowed MIME type and assert 415 returned.
      - Simulate DB failure after object upload (monkeypatch repository or raise exception) and assert object was deleted (no orphan).
@@ -364,10 +364,10 @@ After generating code, run:
 
 Verification & manual steps:
 - Run the attachment upload tests locally (requires docker).
-- Manual test: use curl to POST a small image to the endpoint and verify returned metadata and presence in MinIO console.
+- Manual test: use curl to POST a small image to the endpoint and verify returned metadata and presence in RustFS console.
 
 Checklist:
-- [ ] Implement MinIO client wrapper with threaded calls
+- [ ] Implement RustFS client wrapper with threaded calls
 - [ ] Implement upload endpoint with full validation and compensating deletion
 - [ ] Startup creates bucket if missing
 - [ ] Attachment tests (upload success, oversize, bad MIME, orphan cleanup)
@@ -389,13 +389,13 @@ Tasks:
    - Enforce Authorization header (Bearer token) — if missing, return 401 (we will implement token auth in next prompt; for now optionally bypass in test mode).
 2. Implement DELETE /api/events/{id} to:
    - Delete event row (ON DELETE CASCADE removes attachments DB rows).
-   - After DB deletion, attempt to delete objects from MinIO for attachments (best-effort). If many attachments, perform deletion synchronously for now.
-   - If MinIO deletion fails, log and continue.
+   - After DB deletion, attempt to delete objects from RustFS for attachments (best-effort). If many attachments, perform deletion synchronously for now.
+   - If RustFS deletion fails, log and continue.
 3. Tests:
-   - tests/test_attachment_serve.py using MinIO container:
+   - tests/test_attachment_serve.py using RustFS container:
      - Upload a file in setup, call GET /api/attachments/{key}, fetch presigned URL and perform HTTP GET to confirm object content returned.
    - tests/test_delete_cascade.py:
-     - Create event with attachments, call DELETE /api/events/{id}, assert DB rows removed and that MinIO objects are deleted.
+     - Create event with attachments, call DELETE /api/events/{id}, assert DB rows removed and that RustFS objects are deleted.
 4. Wiring:
    - Register new routes in app/main.py.
    - Add config for PRESIGN_EXPIRY_SECONDS env var.
@@ -415,11 +415,11 @@ After generating code, run:
 
 Verification & manual steps:
 - Manually get presigned URLs via API and fetch object in browser/HTTP client.
-- Confirm delete event cleans DB rows and removes object from MinIO.
+- Confirm delete event cleans DB rows and removes object from RustFS.
 
 Checklist:
 - [ ] Implement presigned URL endpoint
-- [ ] Ensure delete event triggers MinIO object deletion
+- [ ] Ensure delete event triggers RustFS object deletion
 - [ ] Tests for presign and cascade deletion pass
 - [ ] Config for presign expiry added
 
@@ -662,14 +662,14 @@ Implement operational polish: GC task, logging, limits, and documentation.
 
 Tasks:
 1. Implement an admin-only endpoint or CLI task `gc-orphans` that:
-   - Scans MinIO bucket for objects with or without DB attachment rows (match by prefix or key).
+   - Scans RustFS bucket for objects with or without DB attachment rows (match by prefix or key).
    - Optionally deletes orphaned objects when `--delete` flag provided.
    - Provide tests (integration) that create an orphan object and confirm GC finds it and that `--delete` removes it.
 2. Improve logging:
    - Structured logs (JSON or structured messages) with LOG_LEVEL env var.
    - For unhandled exceptions, generate a unique error_id (uuid) returned in user-facing 500 error response, and log stack trace with error_id.
 3. Add telemetry/health endpoints:
-   - /health already exists; add /ready that checks DB + MinIO.
+   - /health already exists; add /ready that checks DB + RustFS.
 4. Enforce limits:
    - Ensure FILE_MAX_BYTES, ATTACHMENT_MAX_PER_EVENT, ALLOWED_MIME_TYPES are respected in attachments service.
    - Add config validation at startup (fail fast if misconfigured).
@@ -685,11 +685,11 @@ Deliverables:
 
 After generating code, run:
 - pytest -q (run GC tests and logging behavior tests)
-- Manual GC run against dev MinIO
+- Manual GC run against dev RustFS
 ```
 
 Verification & manual steps:
-- Run GC with an orphan in MinIO and verify behavior.
+- Run GC with an orphan in RustFS and verify behavior.
 - Trigger a server error to view error id in response and logs.
 
 Checklist:
@@ -716,8 +716,8 @@ Tasks:
 2. Update Dockerfile for production image best practices (install dependencies, copy code, set environment default for RUN_MIGRATIONS).
 3. Update docker-compose.yml:
    - app service entrypoint should run migrations (if RUN_MIGRATIONS=true) then start uvicorn.
-   - Ensure services: db, minio, pgadmin configured properly with volumes.
-   - Add healthchecks for db and minio in compose file.
+   - Ensure services: db, rustfs, pgadmin configured properly with volumes.
+   - Add healthchecks for db and rustfs in compose file.
 4. Acceptance test instructions:
    - Provide commands: docker-compose up --build and curl to API endpoints to validate system works.
    - Add a small acceptance test script tests/acceptance/run_acceptance.sh that hits /health, creates an event, uploads attachment (small), and runs search.
@@ -764,7 +764,7 @@ Tasks:
 2. Add ACCEPTANCE.md with:
    - Concrete acceptance tests (deploy via docker-compose, create event, upload, search, export, rotate token, login to UI).
    - Expected outputs and verification steps.
-3. Add CHANGELOG.md for MVP release 1.0 with notable decisions (single-user token, MinIO attachments, Postgres full-text).
+3. Add CHANGELOG.md for MVP release 1.0 with notable decisions (single-user token, RustFS attachments, Postgres full-text).
 4. Final checklist:
    - Ensure no secrets in repository
    - Ensure pgAdmin bound to 127.0.0.1 instruction present
@@ -792,7 +792,7 @@ Checklist:
 SECTION C — Notes on testing strategy and CI
 -----------------------------
 - Unit tests: run in CI by default; should not require Docker.
-- Integration tests (Postgres/MinIO): mark with pytest marker integration and run only when docker/testcontainers available; optionally enable a CI matrix job for integration tests that uses service containers.
+- Integration tests (Postgres/RustFS): mark with pytest marker integration and run only when docker/testcontainers available; optionally enable a CI matrix job for integration tests that uses service containers.
 - Use testcontainers-python for reproducible integration tests in developer machines and CI where supported.
 - Keep tests idempotent and teardown-created resources.
 
@@ -801,28 +801,28 @@ SECTION D — Example of one detailed prompt iteration (from milestone to tiny s
 -----------------------------
 The prompts above are high-level. Below is an example of how a single prompt (PROMPT 4: Attachments backend) can be further broken into very small steps for safe incremental implementation and testing. Use this pattern for other prompts if you prefer even smaller increments.
 
-PROMPT 4a — Add MinIO client wrapper
+PROMPT 4a — Add RustFS client wrapper
 ```text
-Implement a MinIO client wrapper (storage.py) that provides ensure_bucket, upload_object, presign_get, delete_object.
+Implement a RustFS client wrapper (storage.py) that provides ensure_bucket, upload_object, presign_get, delete_object.
 
 Tasks:
-1. Add dependency minio to requirements.txt.
-2. Create app/services/storage.py with Minio client initialization using MINIO_ENDPOINT, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, MINIO_BUCKET.
+1. Add dependency rustfs to requirements.txt.
+2. Create app/services/storage.py with Minio client initialization using RUSTFS_ENDPOINT, RUSTFS_ACCESS_KEY, RUSTFS_SECRET_KEY, RUSTFS_BUCKET.
 3. Implement ensure_bucket(bucket_name): checks and creates bucket.
-4. Implement upload_object(bucket, object_name, fileobj, length, content_type, metadata) wrapping blocking minio.put_object via asyncio.to_thread.
-5. Implement presign_get(bucket, object_name, expires_seconds) using minio.presigned_get_object wrapped in to_thread.
+4. Implement upload_object(bucket, object_name, fileobj, length, content_type, metadata) wrapping blocking rustfs.put_object via asyncio.to_thread.
+5. Implement presign_get(bucket, object_name, expires_seconds) using rustfs.presigned_get_object wrapped in to_thread.
 6. Implement delete_object(bucket, object_name) via to_thread.
 
 Tests:
-- Unit tests that mock the minio client to ensure upload_object calls client.put_object appropriately (use monkeypatch).
-- Integration test later will test real MinIO.
+- Unit tests that mock the rustfs client to ensure upload_object calls client.put_object appropriately (use monkeypatch).
+- Integration test later will test real RustFS.
 
 Deliverables:
 - app/services/storage.py and updated requirements.txt
 ```
 
 Checkable tasks:
-- [ ] Install minio dependency
+- [ ] Install rustfs dependency
 - [ ] Implement storage wrapper functions
 - [ ] Create unit test for storage wrapper
 
@@ -834,7 +834,7 @@ Tasks:
 1. Create endpoint in app/api/attachments.py accepting files as UploadFile.
 2. Validate file size via UploadFile.file.seek/read or content length header (prefer streaming read).
 3. Implement safe filename sanitization.
-4. Use storage.upload_object to stream file to MinIO and then insert attachment DB row.
+4. Use storage.upload_object to stream file to RustFS and then insert attachment DB row.
 5. Implement compensating deletion if DB insert fails.
 6. Return created attachments metadata.
 
@@ -846,7 +846,7 @@ Deliverables:
 - tests/test_attachments_unit.py
 ```
 
-Continue PROMPT 4c for integration tests against real MinIO.
+Continue PROMPT 4c for integration tests against real RustFS.
 
 -----------------------------
 SECTION E — Delivering prompts to a code-generation LLM

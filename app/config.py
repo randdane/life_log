@@ -22,12 +22,12 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int
     DATABASE_URL: str
 
-    # MinIO
-    MINIO_ROOT_USER: str
-    MINIO_ROOT_PASSWORD: str
-    MINIO_ENDPOINT: str
-    MINIO_BUCKET: str
-    MINIO_SECURE: bool = False
+    # RustFS
+    RUSTFS_ACCESS_KEY: str
+    RUSTFS_SECRET_KEY: str
+    RUSTFS_ENDPOINT: str
+    RUSTFS_BUCKET: str
+    RUSTFS_SECURE: bool = False
 
     # Limits
     FILE_MAX_BYTES: int = 10_485_760  # 10MB
